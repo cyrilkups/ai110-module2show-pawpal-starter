@@ -74,7 +74,7 @@ classDiagram
 
 **b. Design changes**
 
-After an AI review of the skeleton, I made two small design changes. I added `available_minutes_per_day` to `Owner` so the planner has an explicit daily time constraint instead of treating time as a vague preference. I also added `preferred_time_of_day` and `required` to `Task` so the system can better separate must-do care, like medication, from flexible tasks, like enrichment. Those changes made the model clearer and reduced the chance that too much hidden logic would get pushed into `DailyPlanner`.
+After implementation, I made two useful design changes. First, I renamed `DailyPlanner` to `Scheduler` because that name better matches its job as the part of the system that retrieves, sorts, and manages tasks across pets. Second, I added an `Owner.get_all_tasks()` method so the scheduler can ask the owner for a single combined task list instead of reaching into each pet directly. That made the relationship between the classes cleaner and reduced coupling.
 
 ---
 
