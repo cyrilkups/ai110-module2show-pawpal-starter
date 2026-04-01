@@ -1,0 +1,8 @@
+{
+  "name": "Jordan",
+  "available_minutes_per_day": 90,
+  "preferences": {
+    "walk_preference": "morning"
+  },
+  "pets": []
+}

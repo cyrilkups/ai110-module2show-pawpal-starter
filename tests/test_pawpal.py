@@ -1,5 +1,7 @@
 """Quick checks for the PawPal+ logic layer."""
 
+from __future__ import annotations
+
 from datetime import date, timedelta
 
 from pawpal_system import Owner, Pet, Scheduler, Task
@@ -32,21 +34,59 @@ def test_add_task_increases_pet_task_count() -> None:
     assert len(pet.tasks) == 1
 
 
-def test_sort_by_time_orders_tasks_chronologically() -> None:
-    """Ensure the scheduler sorts tasks by their scheduled time."""
+def test_sort_by_time_orders_same_priority_tasks_chronologically() -> None:
+    """Ensure tasks with the same priority are sorted by time."""
     today = date.today()
     owner = build_owner_with_pets()
     mochi = owner.get_pet("Mochi")
     assert mochi is not None
 
-    mochi.add_task(Task(description="Evening walk", scheduled_time="06:00 PM", frequency="daily", due_date=today))
-    mochi.add_task(Task(description="Breakfast", scheduled_time="08:00 AM", frequency="daily", due_date=today))
-    mochi.add_task(Task(description="Morning walk", scheduled_time="07:00 AM", frequency="daily", due_date=today))
+    mochi.add_task(
+        Task(description="Evening walk", scheduled_time="06:00 PM", frequency="daily", due_date=today)
+    )
+    mochi.add_task(
+        Task(description="Breakfast", scheduled_time="08:00 AM", frequency="daily", due_date=today)
+    )
+    mochi.add_task(
+        Task(description="Morning walk", scheduled_time="07:00 AM", frequency="daily", due_date=today)
+    )
 
     scheduler = Scheduler(owner)
     sorted_descriptions = [task.description for task in scheduler.sort_by_time()]
 
     assert sorted_descriptions == ["Morning walk", "Breakfast", "Evening walk"]
+
+
+def test_sort_by_time_prioritizes_priority_before_clock_time() -> None:
+    """Ensure higher-priority tasks come before lower-priority ones."""
+    today = date.today()
+    owner = build_owner_with_pets()
+    mochi = owner.get_pet("Mochi")
+    assert mochi is not None
+
+    mochi.add_task(
+        Task(
+            description="Low priority cleanup",
+            scheduled_time="07:00 AM",
+            frequency="daily",
+            due_date=today,
+            priority="low",
+        )
+    )
+    mochi.add_task(
+        Task(
+            description="High priority meds",
+            scheduled_time="08:30 AM",
+            frequency="daily",
+            due_date=today,
+            priority="high",
+        )
+    )
+
+    scheduler = Scheduler(owner)
+    sorted_descriptions = [task.description for task in scheduler.sort_by_time()]
+
+    assert sorted_descriptions == ["High priority meds", "Low priority cleanup"]
 
 
 def test_filter_tasks_can_limit_by_pet_and_status() -> None:
@@ -123,6 +163,62 @@ def test_detect_conflicts_returns_warning_for_exact_time_match() -> None:
 
     assert len(warnings) == 1
     assert "07:00 AM" in warnings[0]
+
+
+def test_next_available_slot_returns_open_gap_after_busy_tasks() -> None:
+    """Ensure the scheduler can suggest the next open care slot."""
+    today = date.today()
+    owner = build_owner_with_pets()
+    mochi = owner.get_pet("Mochi")
+    assert mochi is not None
+
+    mochi.add_task(
+        Task(
+            description="Breakfast",
+            scheduled_time="07:00 AM",
+            frequency="daily",
+            due_date=today,
+            duration_minutes=30,
+            priority="high",
+        )
+    )
+    mochi.add_task(
+        Task(
+            description="Morning walk",
+            scheduled_time="08:00 AM",
+            frequency="daily",
+            due_date=today,
+            duration_minutes=30,
+            priority="medium",
+        )
+    )
+
+    scheduler = Scheduler(owner)
+
+    assert scheduler.next_available_slot(30) == "06:00 AM"
+    assert scheduler.next_available_slot(45, day_start="07:00 AM") == "08:30 AM"
+
+
+def test_owner_can_save_and_load_json(tmp_path) -> None:
+    """Ensure owners, pets, and tasks persist through JSON storage."""
+    today = date.today()
+    owner = build_owner_with_pets()
+    mochi = owner.get_pet("Mochi")
+    assert mochi is not None
+    mochi.add_task(
+        Task(description="Breakfast", scheduled_time="08:00 AM", frequency="daily", due_date=today)
+    )
+
+    path = tmp_path / "pawpal-data.json"
+    owner.save_to_json(path)
+    loaded_owner = Owner.load_from_json(path)
+
+    assert loaded_owner.name == owner.name
+    assert loaded_owner.available_minutes_per_day == owner.available_minutes_per_day
+    assert loaded_owner.get_pet("Mochi") is not None
+    loaded_tasks = loaded_owner.get_all_tasks()
+    assert len(loaded_tasks) == 1
+    assert loaded_tasks[0].description == "Breakfast"
 
 
 def test_generate_plan_returns_empty_list_when_no_tasks_exist() -> None:

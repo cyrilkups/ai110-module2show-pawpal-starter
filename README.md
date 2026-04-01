@@ -14,10 +14,13 @@ A busy pet owner needs help staying consistent with pet care. They want an assis
 
 - Add and manage multiple pets from one owner profile
 - Add care tasks with a due date, scheduled time, frequency, duration, and priority
-- Sort tasks chronologically so the day reads in time order
+- Sort tasks by priority first and then by due date and time
 - Filter tasks by pet name, completion status, and due date scope
 - Mark tasks complete and automatically create the next daily or weekly occurrence
 - Detect exact-time conflicts and surface warnings before schedule generation
+- Suggest the next available care slot when a task does not fit
+- Show emoji-based priority and status badges in the Streamlit UI and terminal demo
+- Save and restore pet/task data from `data.json`
 - Build a daily plan that respects the owner's available minutes
 - Explain why tasks were scheduled or skipped
 
@@ -53,11 +56,19 @@ Demo preview of the final Streamlit interface.
 
 The scheduler includes a few focused algorithmic features:
 
-- `sort_by_time()` orders tasks by due date, scheduled time, and then priority
+- `sort_by_time()` orders tasks by priority, due date, and then scheduled time
 - `filter_tasks()` narrows the view by pet, completion status, or due date
 - `mark_task_complete()` creates the next recurring task for daily and weekly care
 - `detect_conflicts()` returns warnings when two due tasks share the same exact time
+- `next_available_slot()` suggests the first open care window that can fit a task
 - `generate_plan()` builds a schedule that fits inside the owner's available time budget
+- `save_to_json()` and `load_from_json()` keep pets and tasks between app runs
+
+## Agent Mode Notes
+
+The persistence refactor followed a focused Agent Mode workflow: plan the data conversion first, implement custom dictionary serialization for `Task`, `Pet`, and `Owner`, then wire the Streamlit state to load from disk on startup and save after user actions. That kept the JSON handling easy to trace and reduced the risk of mixing UI logic with storage logic.
+
+I also used Agent Mode as a bounded implementation pass for persistence while keeping the higher-level scheduling and UI decisions under manual review. That made it easier to let AI handle repetitive JSON plumbing without giving up architectural control of the app.
 
 ## Architecture
 
@@ -78,10 +89,12 @@ python -m pytest
 
 The tests cover:
 
-- Chronological sorting
+- Priority-first sorting
 - Filtering by pet and completion status
 - Daily and weekly recurrence
 - Conflict detection for duplicate times
+- Next available slot suggestions
+- JSON persistence round-trips
 - Empty-state scheduling when pets have no tasks
 
 Confidence Level: 4/5 stars. The current suite gives strong coverage for the main scheduling behaviors and several important edge cases, but the app would be even more reliable with additional tests for overlapping durations and longer multi-day planning flows.

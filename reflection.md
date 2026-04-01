@@ -41,12 +41,18 @@ classDiagram
         +str priority
         +bool completed
         +str pet_name
+        +int priority_rank
+        +str priority_badge
+        +str task_icon
+        +str status_badge
         +mark_complete()
         +fits_within(available_minutes)
         +is_due_for(target_date)
         +next_due_date()
         +spawn_next_occurrence()
         +describe()
+        +to_dict()
+        +from_dict(data)
     }
 
     class Owner {
@@ -59,6 +65,10 @@ classDiagram
         +update_preferences(preferences)
         +get_pet(pet_name)
         +get_all_tasks()
+        +to_dict()
+        +from_dict(data)
+        +save_to_json(path)
+        +load_from_json(path)
     }
 
     class Scheduler {
@@ -71,6 +81,7 @@ classDiagram
         +sort_by_time(tasks)
         +filter_tasks(tasks, completed, pet_name, due_on)
         +prioritize_tasks(tasks)
+        +next_available_slot(duration_minutes, tasks, day_start, day_end)
         +detect_conflicts(tasks)
         +mark_task_complete(task)
         +generate_plan()
@@ -99,7 +110,7 @@ I also expanded `Task` to include `due_date` and recurring-task helpers such as 
 
 My scheduler considers the owner's available minutes for the day, each task's due date, whether the task is already completed, the scheduled time, and the task priority. It also supports filtering by pet name and completion status so the owner can focus on a subset of work instead of the entire household at once.
 
-I treated available time and due date as the most important constraints because they decide whether a task should even be part of today's plan. After that, chronological order keeps the schedule readable, and priority works as a tie-breaker when tasks are otherwise similar.
+I treated available time, due date, and priority as the most important constraints because they decide whether a task belongs in today's plan and how urgent it should feel. In the final version, priority comes before time so high-impact tasks like medication can rise to the top even if they were entered later in the day. I also added a next-available-slot helper so the scheduler can suggest where a task might fit when time gets tight.
 
 **b. Tradeoffs**
 
@@ -111,9 +122,11 @@ One tradeoff my scheduler makes is that conflict detection only checks for exact
 
 **a. How you used AI**
 
-VS Code Copilot was most helpful for design brainstorming, small algorithm suggestions, and test planning. I used it to think through the class structure early, suggest clean sorting and filtering approaches, and generate candidate edge cases for recurrence and conflict detection.
+VS Code Copilot was most helpful for design brainstorming, small algorithm suggestions, and test planning. I used it to think through the class structure early, suggest clean sorting and filtering approaches, and generate candidate edge cases for recurrence, persistence, and conflict detection.
 
-The prompts that worked best were narrow and concrete. Questions like "How should the Scheduler retrieve all tasks from the Owner's pets?" or "What edge cases matter for daily recurrence?" led to better suggestions than broad prompts like "Build my whole app."
+The prompts that worked best were narrow and concrete. Questions like "How should the Scheduler retrieve all tasks from the Owner's pets?" or "What edge cases matter for daily recurrence?" led to better suggestions than broad prompts like "Build my whole app." Separate chat sessions for design, persistence, algorithm work, and testing also helped me keep each Copilot conversation focused on one kind of decision at a time.
+
+Agent Mode was especially effective for the persistence challenge because it let me isolate the JSON-loading and JSON-saving work from the rest of the scheduling changes. That made it easier to reason about serialization separately from UI behavior and algorithm design.
 
 **b. Judgment and verification**
 
@@ -123,23 +136,33 @@ I evaluated AI suggestions by reading the code carefully, checking whether the d
 
 ---
 
-## 4. Testing and Verification
+## 4. Prompt Comparison
+
+I could not run Claude or Gemini in this workspace, so I compared two OpenAI models instead: `gpt-5.4-mini` and `gpt-5.2`. I asked both the same question about how to handle weekly-task rescheduling in a Python app built around `Task`, `Pet`, `Owner`, and `Scheduler`.
+
+Both answers were useful, but `gpt-5.4-mini` gave the more modular response. It clearly separated recurrence math, scheduler actions, pet ownership, and persistence boundaries, while `gpt-5.2` gave a slightly more compact answer that was still solid but less explicit about architectural boundaries.
+
+I kept the structure that matched the `gpt-5.4-mini` advice because it felt more Pythonic for this codebase. The final design keeps recurrence helpers on `Task`, completion flow on `Scheduler`, pet lookup on `Owner`, and JSON conversion on the data classes instead of hiding that logic in a single utility layer.
+
+---
+
+## 5. Testing and Verification
 
 **a. What you tested**
 
-I tested task completion, adding tasks to pets, chronological sorting, filtering by pet and status, daily recurrence, weekly recurrence, exact-time conflict warnings, and the case where pets exist but no tasks have been added yet.
+I tested task completion, adding tasks to pets, priority-first sorting, filtering by pet and status, daily recurrence, weekly recurrence, exact-time conflict warnings, next available slot suggestions, JSON persistence, and the case where pets exist but no tasks have been added yet.
 
-These tests mattered because they cover the scheduler's main promises. If sorting is wrong, the daily plan feels confusing. If recurrence is wrong, repeated care like medication becomes unreliable. If conflict warnings fail, the owner could miss obvious schedule problems.
+These tests mattered because they cover the scheduler's main promises. If sorting is wrong, the daily plan feels confusing. If recurrence is wrong, repeated care like medication becomes unreliable. If persistence fails, the app stops feeling like a real assistant because it forgets the household between runs. If conflict warnings fail, the owner could miss obvious schedule problems.
 
 **b. Confidence**
 
 I am fairly confident that the scheduler works correctly for the main project goals. Based on the current test suite and the successful manual runs, I would rate my confidence as 4 out of 5.
 
-If I had more time, I would test overlapping durations instead of only exact time matches, multi-day planning behavior with many recurring tasks, invalid time formats, and cases where many tasks compete for a very small time budget.
+If I had more time, I would test overlapping durations instead of only exact time matches, multi-day planning behavior with many recurring tasks, corrupted JSON recovery, invalid time formats, and cases where many tasks compete for a very small time budget.
 
 ---
 
-## 5. Reflection
+## 6. Reflection
 
 **a. What went well**
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -64,6 +64,24 @@ class Task:
         """Return a compact priority label for UI display."""
         badge_map = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
         return badge_map.get(self.priority.lower(), self.priority.title())
+
+    @property
+    def task_icon(self) -> str:
+        """Return an emoji that matches the task description."""
+        description = self.description.lower()
+        if "walk" in description:
+            return "🦮"
+        if "medication" in description or "meds" in description:
+            return "💊"
+        if "breakfast" in description or "feeding" in description or "dinner" in description:
+            return "🍽"
+        if "groom" in description or "bath" in description:
+            return "🧼"
+        if "litter" in description or "cleanup" in description:
+            return "🧹"
+        if "play" in description or "enrichment" in description:
+            return "🎾"
+        return "🐾"
 
     @property
     def status_badge(self) -> str:
@@ -138,7 +156,7 @@ class Task:
             duration_minutes=int(data.get("duration_minutes", 30)),
             priority=str(data.get("priority", "medium")),
             completed=bool(data.get("completed", False)),
-            pet_name=data.get("pet_name") if data.get("pet_name") is not None else None,
+            pet_name=str(data["pet_name"]) if data.get("pet_name") is not None else None,
         )
 
 
@@ -268,7 +286,11 @@ class Owner:
         """Load an owner from disk, returning a default owner if the file is missing."""
         target_path = Path(path)
         if not target_path.exists():
-            return cls(name="Jordan", available_minutes_per_day=90)
+            return cls(
+                name="Jordan",
+                available_minutes_per_day=90,
+                preferences={"walk_preference": "morning"},
+            )
         return cls.from_dict(json.loads(target_path.read_text(encoding="utf-8")))
 
 
@@ -340,7 +362,15 @@ class Scheduler:
 
         target_tasks = self.filter_tasks(tasks, completed=False, due_on=self.plan_date)
         busy_periods: list[tuple[int, int]] = []
-        for task in self.sort_by_time(target_tasks):
+        chronological_tasks = sorted(
+            target_tasks,
+            key=lambda task: (
+                task.due_date,
+                _time_sort_key(task.scheduled_time),
+                task.description.lower(),
+            ),
+        )
+        for task in chronological_tasks:
             start_minutes = _time_to_minutes(task.scheduled_time)
             end_minutes = start_minutes + task.duration_minutes
             busy_periods.append((start_minutes, end_minutes))

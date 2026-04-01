@@ -70,7 +70,7 @@ def task_rows(tasks: list[Task]) -> list[dict[str, int | str]]:
     return [
         {
             "Pet": task.pet_name or "Unknown",
-            "Task": task.description,
+            "Task": f"{task.task_icon} {task.description}",
             "Due Date": task.due_date.isoformat(),
             "Time": task.scheduled_time,
             "Type": task.frequency.title(),
@@ -89,7 +89,7 @@ def schedule_rows(schedule: list[Task]) -> list[dict[str, int | str]]:
             "Due Date": task.due_date.isoformat(),
             "Time": task.scheduled_time,
             "Pet": task.pet_name or "Unknown",
-            "Task": task.description,
+            "Task": f"{task.task_icon} {task.description}",
             "Duration": task.duration_minutes,
             "Priority": task.priority_badge,
         }
@@ -128,6 +128,7 @@ The app checks whether `"owner"` already exists before creating a new one, so pe
 stay available across Streamlit reruns during the session.
 """
     )
+    st.caption(f"Persistent data file: `{DATA_FILE.name}`")
 
 all_tasks = scheduler.sort_by_time()
 today_tasks = scheduler.filter_tasks(all_tasks, due_on=scheduler.plan_date)
@@ -177,6 +178,7 @@ if add_pet_submitted:
                 care_notes=notes,
             )
         )
+        save_owner(owner)
         st.session_state.schedule_generated = False
         st.session_state.flash_success = f"Added {cleaned_pet_name} to {owner.name}'s household."
         st.rerun()
@@ -221,6 +223,7 @@ if owner.pets:
                     priority=priority,
                 )
             )
+            save_owner(owner)
             st.session_state.schedule_generated = False
             st.session_state.flash_success = f"Added {cleaned_task_description} for {pet.name}."
             st.rerun()
@@ -231,6 +234,7 @@ st.divider()
 
 st.subheader("Task Review")
 if all_tasks:
+    st.caption("Task reviews are sorted by priority first, then by due date and time.")
     filter_col1, filter_col2, filter_col3 = st.columns(3)
     with filter_col1:
         pet_filter = st.selectbox("Filter by pet", ["All pets", *[pet.name for pet in owner.pets]])
@@ -267,6 +271,7 @@ if today_pending_tasks:
             task for task in today_pending_tasks if task_label(task) == selected_task_label
         )
         next_task = scheduler.mark_task_complete(selected_task)
+        save_owner(owner)
         st.session_state.flash_success = (
             f"Marked '{selected_task.description}' complete for {selected_task.pet_name}."
         )
@@ -282,7 +287,13 @@ else:
 st.divider()
 
 st.subheader("Build Schedule")
-st.caption("The scheduler sorts tasks by time, filters incomplete work, and flags exact-time conflicts.")
+st.caption(
+    "The scheduler sorts tasks by priority first, then time, filters incomplete work, and flags exact-time conflicts."
+)
+
+next_open_slot = scheduler.next_available_slot(30, today_tasks)
+if next_open_slot:
+    st.info(f"Next open 30-minute care slot starts at {next_open_slot}.")
 
 if conflict_warnings:
     st.markdown("### Conflict warnings")

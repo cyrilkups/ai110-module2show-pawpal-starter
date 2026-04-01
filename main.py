@@ -36,7 +36,7 @@ def build_demo_owner() -> Owner:
             frequency="daily",
             due_date=today,
             duration_minutes=30,
-            priority="high",
+            priority="medium",
         )
     )
     mochi.add_task(
@@ -67,7 +67,7 @@ def build_demo_owner() -> Owner:
             frequency="daily",
             due_date=today,
             duration_minutes=10,
-            priority="medium",
+            priority="low",
         )
     )
     pixel.add_task(
@@ -77,7 +77,7 @@ def build_demo_owner() -> Owner:
             frequency="weekly",
             due_date=today,
             duration_minutes=20,
-            priority="low",
+            priority="medium",
         )
     )
 
@@ -89,19 +89,23 @@ def build_demo_owner() -> Owner:
 def print_tasks(title: str, tasks: list[Task]) -> None:
     """Print a readable task table in the terminal."""
     print(title)
-    print("-" * 96)
-    print(f"{'Date':<12}{'Time':<10}{'Pet':<12}{'Task':<24}{'Freq':<10}{'Status':<10}")
-    print("-" * 96)
+    print("-" * 126)
+    print(
+        f"{'Date':<12}{'Time':<10}{'Pet':<12}{'Task':<28}"
+        f"{'Type':<12}{'Priority':<14}{'Status':<14}"
+    )
+    print("-" * 126)
 
     for task in tasks:
-        status = "Done" if task.completed else "Pending"
+        task_name = f"{task.task_icon} {task.description}"
         print(
             f"{task.due_date.isoformat():<12}"
             f"{task.scheduled_time:<10}"
             f"{(task.pet_name or 'Unknown'):<12}"
-            f"{task.description:<24}"
-            f"{task.frequency:<10}"
-            f"{status:<10}"
+            f"{task_name:<28}"
+            f"{task.frequency.title():<12}"
+            f"{task.priority_badge:<14}"
+            f"{task.status_badge:<14}"
         )
     print()
 
@@ -109,13 +113,13 @@ def print_tasks(title: str, tasks: list[Task]) -> None:
 def print_warnings(warnings: list[str]) -> None:
     """Print conflict warnings in a compact list."""
     print("Conflict Warnings")
-    print("-" * 96)
+    print("-" * 126)
     if not warnings:
         print("No conflicts detected.\n")
         return
 
     for warning in warnings:
-        print(f"- {warning}")
+        print(f"⚠️  {warning}")
     print()
 
 
@@ -127,7 +131,7 @@ def main() -> None:
     print_tasks("Tasks Entered Out of Order", owner.get_all_tasks())
 
     sorted_tasks = scheduler.sort_by_time()
-    print_tasks("Tasks Sorted by Time", sorted_tasks)
+    print_tasks("Priority-First Schedule View", sorted_tasks)
 
     mochi_pending = scheduler.filter_tasks(completed=False, pet_name="Mochi")
     print_tasks("Pending Tasks for Mochi", scheduler.sort_by_time(mochi_pending))
@@ -135,14 +139,22 @@ def main() -> None:
     breakfast = next(task for task in owner.get_all_tasks() if task.description == "Breakfast")
     next_breakfast = scheduler.mark_task_complete(breakfast)
     print("Recurring Task Demo")
-    print("-" * 96)
+    print("-" * 126)
     if next_breakfast is None:
         print("No new recurring task was created.\n")
     else:
         print(
-            "Completed Breakfast and created the next occurrence for "
+            "✅ Completed Breakfast and created the next occurrence for "
             f"{next_breakfast.due_date.isoformat()} at {next_breakfast.scheduled_time}.\n"
         )
+
+    next_slot = scheduler.next_available_slot(30)
+    print("Next Available Slot")
+    print("-" * 126)
+    if next_slot is None:
+        print("No 30-minute slot is available today.\n")
+    else:
+        print(f"⏰ Next open 30-minute care slot: {next_slot}\n")
 
     schedule = scheduler.generate_plan()
     print_tasks("Today's Schedule", schedule)
