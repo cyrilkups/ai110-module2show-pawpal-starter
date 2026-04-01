@@ -123,3 +123,14 @@ def test_detect_conflicts_returns_warning_for_exact_time_match() -> None:
 
     assert len(warnings) == 1
     assert "07:00 AM" in warnings[0]
+
+
+def test_generate_plan_returns_empty_list_when_no_tasks_exist() -> None:
+    """Ensure the scheduler handles pets with no tasks gracefully."""
+    owner = build_owner_with_pets()
+
+    scheduler = Scheduler(owner)
+    schedule = scheduler.generate_plan()
+
+    assert schedule == []
+    assert scheduler.warnings == []

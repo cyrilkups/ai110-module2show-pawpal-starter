@@ -50,3 +50,15 @@ The scheduler now includes a few lightweight planning features:
 - Filter tasks by pet name or completion status to focus on one animal or one kind of work at a time.
 - Automatically create the next daily or weekly task when a recurring task is completed.
 - Detect exact-time conflicts and return warning messages instead of crashing the program.
+
+## Testing PawPal+
+
+Run the automated test suite with:
+
+```bash
+python -m pytest
+```
+
+The current tests cover core scheduler behavior including chronological sorting, filtering by pet and completion status, recurring daily and weekly task creation, conflict detection for duplicate times, and the edge case where pets exist but no tasks have been scheduled yet.
+
+Confidence Level: 4/5 stars. The current suite gives solid coverage for the main scheduling flows and a few important edge cases, but the app would be even more reliable with additional tests for longer-term scheduling scenarios and richer time-overlap logic.
