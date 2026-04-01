@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from pathlib import Path
 
 
 def _time_sort_key(time_text: str) -> tuple[int, int]:
@@ -15,6 +17,22 @@ def _time_sort_key(time_text: str) -> tuple[int, int]:
         except ValueError:
             continue
     return 23, 59
+
+
+def _time_to_minutes(time_text: str) -> int:
+    """Convert a time string into minutes from midnight."""
+    hours, minutes = _time_sort_key(time_text)
+    return hours * 60 + minutes
+
+
+def _minutes_to_time_text(total_minutes: int) -> str:
+    """Convert minutes from midnight into a 12-hour time string."""
+    total_minutes = max(0, total_minutes)
+    hours, minutes = divmod(total_minutes, 60)
+    day_hours = hours % 24
+    suffix = "AM" if day_hours < 12 else "PM"
+    display_hour = day_hours % 12 or 12
+    return f"{display_hour:02d}:{minutes:02d} {suffix}"
 
 
 @dataclass
@@ -34,6 +52,23 @@ class Task:
     def title(self) -> str:
         """Expose the task description as a title-like label."""
         return self.description
+
+    @property
+    def priority_rank(self) -> int:
+        """Return a numeric priority rank for sorting."""
+        rank_map = {"high": 0, "medium": 1, "low": 2}
+        return rank_map.get(self.priority.lower(), 3)
+
+    @property
+    def priority_badge(self) -> str:
+        """Return a compact priority label for UI display."""
+        badge_map = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
+        return badge_map.get(self.priority.lower(), self.priority.title())
+
+    @property
+    def status_badge(self) -> str:
+        """Return a compact completion label for UI display."""
+        return "✅ Done" if self.completed else "⏳ Pending"
 
     def mark_complete(self) -> None:
         """Mark the task as completed."""
@@ -79,6 +114,33 @@ class Task:
             f"{self.description} ({self.frequency}, {self.priority} priority, {status})"
         )
 
+    def to_dict(self) -> dict[str, object]:
+        """Convert the task into a JSON-serializable dictionary."""
+        return {
+            "description": self.description,
+            "scheduled_time": self.scheduled_time,
+            "frequency": self.frequency,
+            "due_date": self.due_date.isoformat(),
+            "duration_minutes": self.duration_minutes,
+            "priority": self.priority,
+            "completed": self.completed,
+            "pet_name": self.pet_name,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> Task:
+        """Create a task from a dictionary."""
+        return cls(
+            description=str(data["description"]),
+            scheduled_time=str(data["scheduled_time"]),
+            frequency=str(data["frequency"]),
+            due_date=date.fromisoformat(str(data.get("due_date", date.today().isoformat()))),
+            duration_minutes=int(data.get("duration_minutes", 30)),
+            priority=str(data.get("priority", "medium")),
+            completed=bool(data.get("completed", False)),
+            pet_name=data.get("pet_name") if data.get("pet_name") is not None else None,
+        )
+
 
 @dataclass
 class Pet:
@@ -108,6 +170,28 @@ class Pet:
         if target_date is None:
             return [task for task in self.tasks if not task.completed]
         return [task for task in self.tasks if not task.completed and task.is_due_for(target_date)]
+
+    def to_dict(self) -> dict[str, object]:
+        """Convert the pet into a JSON-serializable dictionary."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "age_years": self.age_years,
+            "care_notes": list(self.care_notes),
+            "tasks": [task.to_dict() for task in self.tasks],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> Pet:
+        """Create a pet from a dictionary."""
+        tasks = [Task.from_dict(task_data) for task_data in data.get("tasks", [])]
+        return cls(
+            name=str(data["name"]),
+            species=str(data["species"]),
+            age_years=int(data["age_years"]),
+            care_notes=[str(note) for note in data.get("care_notes", [])],
+            tasks=tasks,
+        )
 
 
 @dataclass
@@ -153,6 +237,40 @@ class Owner:
                 all_tasks.append(task)
         return all_tasks
 
+    def to_dict(self) -> dict[str, object]:
+        """Convert the owner and all nested data into a JSON-serializable dictionary."""
+        return {
+            "name": self.name,
+            "available_minutes_per_day": self.available_minutes_per_day,
+            "preferences": dict(self.preferences),
+            "pets": [pet.to_dict() for pet in self.pets],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> Owner:
+        """Create an owner from a dictionary."""
+        owner = cls(
+            name=str(data.get("name", "Jordan")),
+            available_minutes_per_day=int(data.get("available_minutes_per_day", 90)),
+            preferences={str(key): str(value) for key, value in data.get("preferences", {}).items()},
+        )
+        owner.pets = [Pet.from_dict(pet_data) for pet_data in data.get("pets", [])]
+        return owner
+
+    def save_to_json(self, path: str | Path) -> None:
+        """Persist the owner, pets, and tasks to disk as JSON."""
+        target_path = Path(path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+
+    @classmethod
+    def load_from_json(cls, path: str | Path) -> Owner:
+        """Load an owner from disk, returning a default owner if the file is missing."""
+        target_path = Path(path)
+        if not target_path.exists():
+            return cls(name="Jordan", available_minutes_per_day=90)
+        return cls.from_dict(json.loads(target_path.read_text(encoding="utf-8")))
+
 
 @dataclass
 class Scheduler:
@@ -169,15 +287,14 @@ class Scheduler:
         return self.owner.get_all_tasks()
 
     def sort_by_time(self, tasks: list[Task] | None = None) -> list[Task]:
-        """Return tasks sorted by due date, time, and then priority."""
+        """Return tasks sorted by priority first, then date and time."""
         tasks_to_sort = self.collect_tasks() if tasks is None else tasks
-        priority_rank = {"high": 0, "medium": 1, "low": 2}
         return sorted(
             tasks_to_sort,
             key=lambda task: (
+                task.priority_rank,
                 task.due_date,
                 _time_sort_key(task.scheduled_time),
-                priority_rank.get(task.priority.lower(), 3),
                 task.description.lower(),
             ),
         )
@@ -209,6 +326,36 @@ class Scheduler:
         """Prepare due and incomplete tasks in chronological order."""
         due_tasks = self.filter_tasks(tasks, completed=False, due_on=self.plan_date)
         return self.sort_by_time(due_tasks)
+
+    def next_available_slot(
+        self,
+        duration_minutes: int,
+        tasks: list[Task] | None = None,
+        day_start: str = "06:00 AM",
+        day_end: str = "10:00 PM",
+    ) -> str | None:
+        """Find the next open time slot that can fit the requested duration."""
+        if duration_minutes <= 0:
+            return None
+
+        target_tasks = self.filter_tasks(tasks, completed=False, due_on=self.plan_date)
+        busy_periods: list[tuple[int, int]] = []
+        for task in self.sort_by_time(target_tasks):
+            start_minutes = _time_to_minutes(task.scheduled_time)
+            end_minutes = start_minutes + task.duration_minutes
+            busy_periods.append((start_minutes, end_minutes))
+
+        current_start = _time_to_minutes(day_start)
+        day_end_minutes = _time_to_minutes(day_end)
+
+        for start_minutes, end_minutes in busy_periods:
+            if current_start + duration_minutes <= start_minutes:
+                return _minutes_to_time_text(current_start)
+            current_start = max(current_start, end_minutes)
+
+        if current_start + duration_minutes <= day_end_minutes:
+            return _minutes_to_time_text(current_start)
+        return None
 
     def detect_conflicts(self, tasks: list[Task] | None = None) -> list[str]:
         """Return lightweight warnings for tasks that share the same exact time."""
@@ -268,8 +415,11 @@ class Scheduler:
                     f"Scheduled {task.description} for {task.pet_name} at {task.scheduled_time}."
                 )
             else:
+                next_slot = self.next_available_slot(task.duration_minutes, due_tasks)
+                slot_text = f" Next open slot: {next_slot}." if next_slot else ""
                 self.explanations.append(
                     f"Skipped {task.description} because only {remaining_minutes} minutes were left."
+                    f"{slot_text}"
                 )
 
         return self.planned_tasks

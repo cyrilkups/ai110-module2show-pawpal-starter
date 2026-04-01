@@ -17,10 +17,38 @@ I started with four classes: `Owner`, `Pet`, `Task`, and `DailyPlanner`.
 - `Task` represents an individual care activity. It stores the task title, category, duration, priority, preferred time of day, whether it is required, and whether it has been completed. Its responsibility is to describe one schedulable unit of work.
 - `DailyPlanner` acts as the scheduling engine. It gathers tasks across pets, prioritizes them using owner constraints, generates the daily plan, and provides short explanations for the chosen schedule.
 
-Mermaid UML draft:
+Final Mermaid UML after implementation:
 
 ```mermaid
 classDiagram
+    class Pet {
+        +str name
+        +str species
+        +int age_years
+        +list care_notes
+        +list tasks
+        +add_task(task)
+        +remove_task(task_description)
+        +get_required_tasks(target_date)
+    }
+
+    class Task {
+        +str description
+        +str scheduled_time
+        +str frequency
+        +date due_date
+        +int duration_minutes
+        +str priority
+        +bool completed
+        +str pet_name
+        +mark_complete()
+        +fits_within(available_minutes)
+        +is_due_for(target_date)
+        +next_due_date()
+        +spawn_next_occurrence()
+        +describe()
+    }
+
     class Owner {
         +str name
         +int available_minutes_per_day
@@ -29,52 +57,39 @@ classDiagram
         +add_pet(pet)
         +remove_pet(pet_name)
         +update_preferences(preferences)
+        +get_pet(pet_name)
+        +get_all_tasks()
     }
 
-    class Pet {
-        +str name
-        +str species
-        +int age_years
-        +list care_notes
-        +list tasks
-        +add_task(task)
-        +remove_task(task_title)
-        +get_required_tasks()
-    }
-
-    class Task {
-        +str title
-        +str category
-        +int duration_minutes
-        +str priority
-        +str preferred_time_of_day
-        +bool required
-        +bool completed
-        +mark_complete()
-        +fits_within(available_minutes)
-        +describe()
-    }
-
-    class DailyPlanner {
+    class Scheduler {
         +Owner owner
         +date plan_date
         +list planned_tasks
         +list explanations
+        +list warnings
         +collect_tasks()
+        +sort_by_time(tasks)
+        +filter_tasks(tasks, completed, pet_name, due_on)
         +prioritize_tasks(tasks)
+        +detect_conflicts(tasks)
+        +mark_task_complete(task)
         +generate_plan()
         +explain_plan()
     }
 
     Owner "1" --> "*" Pet : cares for
     Pet "1" --> "*" Task : needs
-    DailyPlanner --> Owner : reads constraints
-    DailyPlanner --> Task : schedules
+    Scheduler --> Owner : reads constraints
+    Scheduler ..> Task : sorts and schedules
 ```
+
+I also saved this final version as `uml_final.png` in the project folder so the diagram is available as an image as well as Mermaid text.
 
 **b. Design changes**
 
 After implementation, I made two useful design changes. First, I renamed `DailyPlanner` to `Scheduler` because that name better matches its job as the part of the system that retrieves, sorts, and manages tasks across pets. Second, I added an `Owner.get_all_tasks()` method so the scheduler can ask the owner for a single combined task list instead of reaching into each pet directly. That made the relationship between the classes cleaner and reduced coupling.
+
+I also expanded `Task` to include `due_date` and recurring-task helpers such as `next_due_date()` and `spawn_next_occurrence()`. That let me keep recurrence rules close to the task data itself instead of burying all of that logic inside the scheduler.
 
 ---
 
@@ -82,8 +97,9 @@ After implementation, I made two useful design changes. First, I renamed `DailyP
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+My scheduler considers the owner's available minutes for the day, each task's due date, whether the task is already completed, the scheduled time, and the task priority. It also supports filtering by pet name and completion status so the owner can focus on a subset of work instead of the entire household at once.
+
+I treated available time and due date as the most important constraints because they decide whether a task should even be part of today's plan. After that, chronological order keeps the schedule readable, and priority works as a tie-breaker when tasks are otherwise similar.
 
 **b. Tradeoffs**
 
@@ -95,13 +111,15 @@ One tradeoff my scheduler makes is that conflict detection only checks for exact
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+VS Code Copilot was most helpful for design brainstorming, small algorithm suggestions, and test planning. I used it to think through the class structure early, suggest clean sorting and filtering approaches, and generate candidate edge cases for recurrence and conflict detection.
+
+The prompts that worked best were narrow and concrete. Questions like "How should the Scheduler retrieve all tasks from the Owner's pets?" or "What edge cases matter for daily recurrence?" led to better suggestions than broad prompts like "Build my whole app."
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+One AI suggestion I chose not to follow all the way was to build more complex overlap-based conflict detection using task durations. That version was more powerful, but it also would have added more calendar logic than this project needed. I kept the simpler exact-time conflict rule because it was easier to explain, easier to test, and still useful to a pet owner.
+
+I evaluated AI suggestions by reading the code carefully, checking whether the design still felt clean, and then verifying behavior with `main.py`, the Streamlit UI, and the pytest suite. If a suggestion increased complexity without making the user experience meaningfully better, I simplified it.
 
 ---
 
@@ -109,13 +127,15 @@ One tradeoff my scheduler makes is that conflict detection only checks for exact
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+I tested task completion, adding tasks to pets, chronological sorting, filtering by pet and status, daily recurrence, weekly recurrence, exact-time conflict warnings, and the case where pets exist but no tasks have been added yet.
+
+These tests mattered because they cover the scheduler's main promises. If sorting is wrong, the daily plan feels confusing. If recurrence is wrong, repeated care like medication becomes unreliable. If conflict warnings fail, the owner could miss obvious schedule problems.
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+I am fairly confident that the scheduler works correctly for the main project goals. Based on the current test suite and the successful manual runs, I would rate my confidence as 4 out of 5.
+
+If I had more time, I would test overlapping durations instead of only exact time matches, multi-day planning behavior with many recurring tasks, invalid time formats, and cases where many tasks compete for a very small time budget.
 
 ---
 
@@ -123,12 +143,14 @@ One tradeoff my scheduler makes is that conflict detection only checks for exact
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+I am most satisfied with the way the scheduler logic and the Streamlit UI ended up reinforcing each other. The same sorting, filtering, conflict-warning, and recurrence methods power both the backend behavior and what the user actually sees on screen.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+In another iteration, I would redesign recurring tasks as templates plus generated task instances. That would make it easier to manage a long history of completed tasks without mixing them directly into the same list as future tasks.
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+My biggest takeaway is that working with powerful AI still requires a human lead architect. Copilot was great at producing options, sketches, and test ideas, but I had to decide which abstractions to keep, which tradeoffs were acceptable, and when a simpler design was better than a more impressive one.
+
+Using separate chat sessions for design, implementation, algorithm work, and testing also helped me stay organized. Each phase had a clear goal, and that made it easier to judge AI suggestions in the right context instead of letting one conversation become a cluttered mix of unrelated decisions.
