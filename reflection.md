@@ -87,8 +87,7 @@ After implementation, I made two useful design changes. First, I renamed `DailyP
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+One tradeoff my scheduler makes is that conflict detection only checks for exact time matches, like two tasks both scheduled at 7:00 AM, instead of trying to calculate overlapping durations. That is a simpler rule than a full calendar system, but it is reasonable for this project because it still surfaces obvious scheduling problems quickly without adding a lot of complexity to the first version of the app.
 
 ---
 
