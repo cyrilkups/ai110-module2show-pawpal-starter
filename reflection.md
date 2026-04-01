@@ -2,15 +2,79 @@
 
 ## 1. System Design
 
+Before drafting the classes, I identified three core actions PawPal+ should support:
+
+- A pet owner should be able to create or update a pet profile so the app knows which animal needs care and what kind of care matters most.
+- A pet owner should be able to add and edit care tasks such as walks, feeding, medication, grooming, or enrichment with enough detail to schedule them well.
+- A pet owner should be able to generate today's plan and quickly understand why each task was selected and ordered the way it was.
+
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+I started with four classes: `Owner`, `Pet`, `Task`, and `DailyPlanner`.
+
+- `Owner` holds the owner's name, available minutes for the day, preferences, and the list of pets they are responsible for. Its main job is to manage pet relationships and capture scheduling constraints from the human side.
+- `Pet` holds pet-specific details such as name, species, age, care notes, and the tasks that belong to that pet. Its responsibility is to organize care needs at the pet level.
+- `Task` represents an individual care activity. It stores the task title, category, duration, priority, preferred time of day, whether it is required, and whether it has been completed. Its responsibility is to describe one schedulable unit of work.
+- `DailyPlanner` acts as the scheduling engine. It gathers tasks across pets, prioritizes them using owner constraints, generates the daily plan, and provides short explanations for the chosen schedule.
+
+Mermaid UML draft:
+
+```mermaid
+classDiagram
+    class Owner {
+        +str name
+        +int available_minutes_per_day
+        +dict preferences
+        +list pets
+        +add_pet(pet)
+        +remove_pet(pet_name)
+        +update_preferences(preferences)
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +int age_years
+        +list care_notes
+        +list tasks
+        +add_task(task)
+        +remove_task(task_title)
+        +get_required_tasks()
+    }
+
+    class Task {
+        +str title
+        +str category
+        +int duration_minutes
+        +str priority
+        +str preferred_time_of_day
+        +bool required
+        +bool completed
+        +mark_complete()
+        +fits_within(available_minutes)
+        +describe()
+    }
+
+    class DailyPlanner {
+        +Owner owner
+        +date plan_date
+        +list planned_tasks
+        +list explanations
+        +collect_tasks()
+        +prioritize_tasks(tasks)
+        +generate_plan()
+        +explain_plan()
+    }
+
+    Owner "1" --> "*" Pet : cares for
+    Pet "1" --> "*" Task : needs
+    DailyPlanner --> Owner : reads constraints
+    DailyPlanner --> Task : schedules
+```
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+After an AI review of the skeleton, I made two small design changes. I added `available_minutes_per_day` to `Owner` so the planner has an explicit daily time constraint instead of treating time as a vague preference. I also added `preferred_time_of_day` and `required` to `Task` so the system can better separate must-do care, like medication, from flexible tasks, like enrichment. Those changes made the model clearer and reduced the chance that too much hidden logic would get pushed into `DailyPlanner`.
 
 ---
 
